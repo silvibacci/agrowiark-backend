@@ -1,0 +1,35 @@
+# AgrowIArk Backend — Dependencias
+# Instalar con: pip install -r requirements.txt
+#
+# NOTA WINDOWS: si rasterio falla con pip, instalar primero con:
+#   pip install pipwin && pipwin install rasterio
+# O usar conda:
+#   conda install -c conda-forge rasterio pyproj shapely
+
+# --- API ---
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+python-dotenv>=1.0.0
+
+# --- Validación ---
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# --- Satelital: Microsoft Planetary Computer (gratuito) ---
+pystac-client>=0.7.6
+planetary-computer>=1.0.0
+
+# --- Procesamiento raster ---
+rasterio>=1.3.9
+numpy>=1.26.0
+pyproj>=3.6.1
+shapely>=2.0.4
+
+# --- Generación de imagen NDVI (mapa de colores) ---
+Pillow>=10.0.0
+
+# --- HTTP cliente (para Open-Meteo clima) ---
+httpx>=0.27.0
+
+# --- IA: Groq (resumen en lenguaje natural) ---
+groq>=0.9.0

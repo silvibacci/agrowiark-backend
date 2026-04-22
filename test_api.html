@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgrowIArk — Test API</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:#080c0a; --surface:#0e1410; --surface2:#141a12;
+      --border:#1e2a1a; --green:#39ff6a; --green-dim:#1a8c3a;
+      --cyan:#00e5cc; --amber:#ffb800; --red:#ff4545;
+      --text:#e8f0e4; --text-dim:#6b7d65; --text-mid:#9aab92;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Syne', sans-serif;
+      min-height: 100vh; padding: 40px 20px;
+    }
+    .grid-bg {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background-image:
+        linear-gradient(rgba(57,255,106,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(57,255,106,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+    .container { max-width: 800px; margin: 0 auto; position: relative; z-index: 1; }
+
+    h1 { font-size: 28px; font-weight: 800; margin-bottom: 6px; }
+    h1 span { color: var(--green); }
+    .subtitle { color: var(--text-dim); font-size: 14px; margin-bottom: 40px; }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px; margin-bottom: 24px;
+    }
+    .card-title {
+      font-size: 13px; font-weight: 700; color: var(--text-mid);
+      text-transform: uppercase; letter-spacing: 1px;
+      font-family: 'JetBrains Mono', monospace; margin-bottom: 16px;
+    }
+
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    label { font-size: 12px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
+    input {
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); padding: 10px 14px; border-radius: 8px;
+      font-family: 'JetBrains Mono', monospace; font-size: 14px;
+      outline: none; transition: border-color 0.2s;
+    }
+    input:focus { border-color: rgba(57,255,106,0.5); }
+
+    .btn {
+      background: var(--green); color: #000; border: none; cursor: pointer;
+      padding: 10px 24px; border-radius: 8px; font-family: 'Syne', sans-serif;
+      font-weight: 700; font-size: 14px; transition: all 0.2s; white-space: nowrap;
+    }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(57,255,106,0.3); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .presets { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .preset-btn {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text-mid); padding: 6px 12px; border-radius: 6px;
+      cursor: pointer; font-size: 12px; font-family: 'JetBrains Mono', monospace;
+      transition: all 0.2s;
+    }
+    .preset-btn:hover { border-color: var(--green); color: var(--green); }
+
+    .result { display: none; }
+    .result.visible { display: block; animation: fadeUp 0.4s ease; }
+    @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+
+    .ndvi-hero {
+      display: flex; align-items: center; gap: 24px; margin-bottom: 24px;
+    }
+    .ndvi-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 56px; font-weight: 700; line-height: 1;
+    }
+    .ndvi-meta { display: flex; flex-direction: column; gap: 6px; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 12px; border-radius: 20px; font-size: 12px;
+      font-family: 'JetBrains Mono', monospace; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.5px; width: fit-content;
+    }
+    .ndvi-desc { color: var(--text-mid); font-size: 14px; }
+
+    .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+    .meta-item { background: var(--surface2); padding: 12px 16px; border-radius: 8px; }
+    .meta-label { font-size: 10px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+    .meta-val { font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--cyan); }
+
+    .error-box {
+      background: rgba(255,69,69,0.08); border: 1px solid rgba(255,69,69,0.3);
+      border-radius: 8px; padding: 16px; color: var(--red); font-size: 14px; display: none;
+    }
+    .error-box.visible { display: block; }
+
+    .loading {
+      display: none; align-items: center; gap: 12px;
+      color: var(--text-mid); font-size: 14px; padding: 16px 0;
+    }
+    .loading.visible { display: flex; }
+    .spinner {
+      width: 20px; height: 20px; border: 2px solid var(--border);
+      border-top-color: var(--green); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .serie-btn-wrap { margin-top: 16px; }
+    .serie-result { margin-top: 16px; }
+    .serie-list { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; }
+    .serie-item {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--surface2); padding: 8px 14px; border-radius: 6px;
+    }
+    .serie-fecha { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-dim); width: 72px; }
+    .serie-bar { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    .serie-bar-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
+    .serie-ndvi { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; width: 52px; text-align: right; }
+
+    .api-url {
+      font-family: 'JetBrains Mono', monospace; font-size: 12px;
+      color: var(--text-dim); background: var(--surface2);
+      padding: 8px 12px; border-radius: 6px; margin-top: 8px;
+      word-break: break-all;
+    }
+
+    @media (max-width: 600px) {
+      .form-grid { grid-template-columns: 1fr 1fr; }
+      .form-grid .btn { grid-column: 1 / -1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="grid-bg"></div>
+  <div class="container">
+
+    <h1>Agro<span>wIArk</span> — Test API</h1>
+    <p class="subtitle">Probá el endpoint de NDVI en tiempo real. El servidor debe estar corriendo en localhost:8000</p>
+
+    <!-- NDVI Punto -->
+    <div class="card">
+      <div class="card-title">POST /api/v1/lotes/ndvi — NDVI actual</div>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label>LATITUD</label>
+          <input type="number" id="lat" value="-31.4167" step="0.0001" placeholder="-31.4167">
+        </div>
+        <div class="form-group">
+          <label>LONGITUD</label>
+          <input type="number" id="lng" value="-64.1833" step="0.0001" placeholder="-64.1833">
+        </div>
+        <button class="btn" id="btn-consultar" onclick="consultarNDVI()">Consultar</button>
+      </div>
+
+      <div class="presets">
+        <span style="font-size:12px;color:var(--text-dim);align-self:center">Probar con:</span>
+        <button class="preset-btn" onclick="setCoords(-31.4167,-64.1833)">Córdoba</button>
+        <button class="preset-btn" onclick="setCoords(-34.6037,-58.3816)">Buenos Aires</button>
+        <button class="preset-btn" onclick="setCoords(-33.0000,-60.0000)">Santa Fe</button>
+        <button class="preset-btn" onclick="setCoords(-38.7183,-62.2663)">Bahía Blanca</button>
+        <button class="preset-btn" onclick="setCoords(-27.4515,-58.9867)">Chaco</button>
+      </div>
+
+      <div class="api-url" id="api-url-display">POST http://localhost:8000/api/v1/lotes/ndvi</div>
+
+      <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <span>Consultando Sentinel-2 vía Microsoft Planetary Computer...</span>
+      </div>
+
+      <div class="error-box" id="error-box"></div>
+
+      <div class="result" id="result">
+        <div class="ndvi-hero">
+          <div class="ndvi-value" id="ndvi-valor">—</div>
+          <div class="ndvi-meta">
+            <div class="badge" id="ndvi-badge">—</div>
+            <div class="ndvi-desc" id="ndvi-desc">—</div>
+          </div>
+        </div>
+        <div class="meta-grid">
+          <div class="meta-item">
+            <div class="meta-label">Fecha imagen</div>
+            <div class="meta-val" id="meta-fecha">—</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-label">Días desde imagen</div>
+            <div class="meta-val" id="meta-dias">—</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-label">Nubosidad</div>
+            <div class="meta-val" id="meta-nube">—</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-label">Fuente</div>
+            <div class="meta-val" id="meta-fuente" style="font-size:11px">—</div>
+          </div>
+        </div>
+
+        <!-- Serie temporal -->
+        <div class="serie-btn-wrap">
+          <button class="btn" id="btn-serie" onclick="consultarSerie()" style="background:transparent;border:1px solid var(--green);color:var(--green);margin-top:16px">
+            Ver serie temporal (últimos 24 meses)
+          </button>
+        </div>
+        <div class="loading" id="loading-serie">
+          <div class="spinner"></div>
+          <span>Generando serie temporal... puede tardar hasta 60 segundos.</span>
+        </div>
+        <div class="serie-result" id="serie-result" style="display:none">
+          <div class="card-title" style="margin-top:16px">EVOLUCIÓN NDVI — ÚLTIMOS 24 MESES</div>
+          <div class="serie-list" id="serie-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Links útiles -->
+    <div class="card">
+      <div class="card-title">Links del servidor</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <a href="http://localhost:8000/docs" target="_blank" class="preset-btn" style="text-decoration:none">📄 Swagger UI</a>
+        <a href="http://localhost:8000/redoc" target="_blank" class="preset-btn" style="text-decoration:none">📘 ReDoc</a>
+        <a href="http://localhost:8000/health" target="_blank" class="preset-btn" style="text-decoration:none">❤️ Health check</a>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const API = 'http://localhost:8000';
+
+    function setCoords(lat, lng) {
+      document.getElementById('lat').value = lat;
+      document.getElementById('lng').value = lng;
+      updateUrlDisplay(lat, lng);
+    }
+
+    function updateUrlDisplay(lat, lng) {
+      document.getElementById('api-url-display').textContent =
+        `POST ${API}/api/v1/lotes/ndvi  →  { "lat": ${lat}, "lng": ${lng} }`;
+    }
+
+    document.getElementById('lat').addEventListener('input', () => {
+      updateUrlDisplay(
+        document.getElementById('lat').value,
+        document.getElementById('lng').value
+      );
+    });
+    document.getElementById('lng').addEventListener('input', () => {
+      updateUrlDisplay(
+        document.getElementById('lat').value,
+        document.getElementById('lng').value
+      );
+    });
+
+    async function consultarNDVI() {
+      const lat = parseFloat(document.getElementById('lat').value);
+      const lng = parseFloat(document.getElementById('lng').value);
+
+      if (isNaN(lat) || isNaN(lng)) {
+        mostrarError('Ingresá coordenadas válidas.');
+        return;
+      }
+
+      setLoading(true);
+      ocultarError();
+      ocultarResultado();
+      ocultarSerie();
+
+      try {
+        const res = await fetch(`${API}/api/v1/lotes/ndvi`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lat, lng }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          const msg = data.detail?.detalle || data.detail || 'Error desconocido';
+          mostrarError(msg);
+          return;
+        }
+
+        mostrarResultado(data);
+      } catch (err) {
+        mostrarError(
+          'No se pudo conectar con el servidor. ' +
+          'Asegurate de que el backend esté corriendo: python run.py'
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    async function consultarSerie() {
+      const lat = parseFloat(document.getElementById('lat').value);
+      const lng = parseFloat(document.getElementById('lng').value);
+
+      document.getElementById('loading-serie').classList.add('visible');
+      document.getElementById('btn-serie').disabled = true;
+      document.getElementById('serie-result').style.display = 'none';
+
+      try {
+        const res = await fetch(
+          `${API}/api/v1/lotes/ndvi/serie?meses=24`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lat, lng }),
+          }
+        );
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail?.detalle || 'Error en serie');
+
+        mostrarSerie(data.serie);
+      } catch (err) {
+        alert('Error al cargar serie: ' + err.message);
+      } finally {
+        document.getElementById('loading-serie').classList.remove('visible');
+        document.getElementById('btn-serie').disabled = false;
+      }
+    }
+
+    function mostrarResultado(d) {
+      document.getElementById('ndvi-valor').textContent = d.ndvi.toFixed(3);
+      document.getElementById('ndvi-valor').style.color = d.color;
+
+      const badge = document.getElementById('ndvi-badge');
+      badge.textContent = d.categoria.replace('_', ' ').toUpperCase();
+      badge.style.background = d.color + '1a';
+      badge.style.border = `1px solid ${d.color}55`;
+      badge.style.color = d.color;
+
+      document.getElementById('ndvi-desc').textContent = d.descripcion;
+      document.getElementById('meta-fecha').textContent = d.fecha_imagen;
+      document.getElementById('meta-dias').textContent = `Hace ${d.dias_desde_imagen} días`;
+      document.getElementById('meta-nube').textContent = `${d.nubosidad_pct}%`;
+      document.getElementById('meta-fuente').textContent = d.fuente;
+
+      document.getElementById('result').classList.add('visible');
+    }
+
+    function mostrarSerie(serie) {
+      const lista = document.getElementById('serie-list');
+      lista.innerHTML = '';
+
+      const maxNdvi = Math.max(...serie.map(s => s.ndvi));
+
+      serie.forEach(s => {
+        const pct = maxNdvi > 0 ? (s.ndvi / maxNdvi) * 100 : 0;
+        const item = document.createElement('div');
+        item.className = 'serie-item';
+        item.innerHTML = `
+          <span class="serie-fecha">${s.fecha}</span>
+          <div class="serie-bar">
+            <div class="serie-bar-fill" style="width:${Math.max(0,pct)}%;background:${s.color}"></div>
+          </div>
+          <span class="serie-ndvi" style="color:${s.color}">${s.ndvi.toFixed(3)}</span>
+        `;
+        lista.appendChild(item);
+      });
+
+      document.getElementById('serie-result').style.display = 'block';
+    }
+
+    function setLoading(on) {
+      document.getElementById('loading').classList.toggle('visible', on);
+      document.getElementById('btn-consultar').disabled = on;
+    }
+
+    function mostrarError(msg) {
+      const box = document.getElementById('error-box');
+      box.textContent = '⚠ ' + msg;
+      box.classList.add('visible');
+    }
+
+    function ocultarError() { document.getElementById('error-box').classList.remove('visible'); }
+    function ocultarResultado() { document.getElementById('result').classList.remove('visible'); }
+    function ocultarSerie() {
+      document.getElementById('serie-result').style.display = 'none';
+      document.getElementById('loading-serie').classList.remove('visible');
+    }
+
+    // Inicializar display URL
+    updateUrlDisplay(-31.4167, -64.1833);
+  </script>
+</body>
+</html>
