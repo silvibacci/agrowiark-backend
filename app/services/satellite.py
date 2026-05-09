@@ -429,7 +429,7 @@ def _tam_px_para_ha(hectareas: float, con_margen: bool = False) -> int:
     lado_px = int(math.sqrt(hectareas * 10_000) / 10)
     if con_margen:
         lado_px = int(lado_px * 1.8)
-    return max(64, min(300, lado_px))
+    return max(128, min(300, lado_px))
 
 
 def _dibujar_contorno_lote(rgb: np.ndarray, hectareas: Optional[float]) -> np.ndarray:
@@ -522,7 +522,7 @@ def get_ndvi_mapa(lat: float, lng: float, hectareas: Optional[float] = None) -> 
     # Convertir a imagen RGB y escalar — mostramos solo el área del lote
     rgb = _ndvi_a_rgb(ndvi_arr)
     img = Image.fromarray(rgb, "RGB")
-    img = img.resize((512, 512), Image.BILINEAR)
+    img = img.resize((512, 512), Image.NEAREST)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -652,7 +652,7 @@ def get_ndwi_mapa(lat: float, lng: float, hectareas: Optional[float] = None) -> 
     # Imagen — mostramos solo el área del lote
     rgb = _ndwi_a_rgb(ndwi_arr)
     img = Image.fromarray(rgb, "RGB")
-    img = img.resize((512, 512), Image.BILINEAR)
+    img = img.resize((512, 512), Image.NEAREST)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
