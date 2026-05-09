@@ -420,13 +420,16 @@ def _ndvi_a_rgb(ndvi_array: np.ndarray) -> np.ndarray:
     return rgb
 
 
-def _tam_px_para_ha(hectareas: float) -> int:
+def _tam_px_para_ha(hectareas: float, con_margen: bool = False) -> int:
     """
-    Calcula el tamaño de ventana en píxeles para aproximar el área del lote.
-    A 10 m/px: lado = sqrt(ha * 10000) / 10 px. Agrega 80% de margen para contexto.
+    Tamaño de ventana en píxeles para el lote.
+    con_margen=False → ventana exacta del lote (para mostrar solo el lote).
+    con_margen=True  → agrega 80% de margen para contexto.
     """
-    lado_px = int(math.sqrt(hectareas * 10_000) / 10 * 1.8)
-    return max(80, min(220, lado_px))
+    lado_px = int(math.sqrt(hectareas * 10_000) / 10)
+    if con_margen:
+        lado_px = int(lado_px * 1.8)
+    return max(64, min(300, lado_px))
 
 
 def _dibujar_contorno_lote(rgb: np.ndarray, hectareas: Optional[float]) -> np.ndarray:
@@ -474,7 +477,8 @@ def get_ndvi_mapa(lat: float, lng: float, hectareas: Optional[float] = None) -> 
     Genera una imagen PNG del mapa NDVI para el área del lote.
     Si se proveen hectáreas, ajusta la ventana para mostrar solo el lote.
     """
-    tam_px = _tam_px_para_ha(hectareas) if hectareas else 200
+    # Sin hectáreas usamos ventana fija; con hectáreas leemos exactamente el lote
+    tam_px = _tam_px_para_ha(hectareas) if hectareas else 160
     catalog = _cliente_stac()
     ahora = datetime.now(timezone.utc)
 
@@ -515,15 +519,10 @@ def get_ndvi_mapa(lat: float, lng: float, hectareas: Optional[float] = None) -> 
     ndvi_max = float(np.percentile(ndvi_validos, 95)) if len(ndvi_validos) > 0 else 0.0
     pct_estres = float(np.mean(ndvi_arr < 0.3) * 100)
 
-    # Convertir a imagen RGB y escalar
+    # Convertir a imagen RGB y escalar — mostramos solo el área del lote
     rgb = _ndvi_a_rgb(ndvi_arr)
     img = Image.fromarray(rgb, "RGB")
     img = img.resize((512, 512), Image.BILINEAR)
-
-    # Dibujar contorno DESPUÉS del resize para que no se borre con el suavizado
-    rgb512 = np.array(img)
-    rgb512 = _dibujar_contorno_lote(rgb512, hectareas)
-    img = Image.fromarray(rgb512, "RGB")
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -650,14 +649,10 @@ def get_ndwi_mapa(lat: float, lng: float, hectareas: Optional[float] = None) -> 
     else:
         estado_hidrico = {"estado": "seco", "color": "#ff4545", "descripcion": "Déficit hídrico — monitorear"}
 
-    # Imagen — dibujar contorno DESPUÉS del resize
+    # Imagen — mostramos solo el área del lote
     rgb = _ndwi_a_rgb(ndwi_arr)
     img = Image.fromarray(rgb, "RGB")
     img = img.resize((512, 512), Image.BILINEAR)
-
-    rgb512 = np.array(img)
-    rgb512 = _dibujar_contorno_lote(rgb512, hectareas)
-    img = Image.fromarray(rgb512, "RGB")
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
