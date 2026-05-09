@@ -367,12 +367,8 @@ def _leer_ventana_area(href: str, lat: float, lng: float, tam_px: int) -> np.nda
 
 def _ndvi_a_rgb(ndvi_array: np.ndarray) -> np.ndarray:
     """
-    Convierte array NDVI (float, -1 a 1) a imagen RGB con colormap AgrowIArk:
-      < 0      → azul oscuro (agua / sin datos)
-      0–0.2    → rojo       (#ff4545 — alerta)
-      0.2–0.4  → ámbar      (#ffb800 — atención)
-      0.4–0.6  → verde claro
-      0.6–1.0  → verde brillante (#39ff6a — óptimo)
+    Convierte array NDVI a RGB usando colormap RdYlGn con estiramiento por percentiles.
+    El contraste se adapta al rango real de la escena, igual que FieldData/QGIS.
     """
     h, w = ndvi_array.shape
     rgb = np.zeros((h, w, 3), dtype=np.uint8)
@@ -382,85 +378,119 @@ def _ndvi_a_rgb(ndvi_array: np.ndarray) -> np.ndarray:
         b = np.array(b, dtype=np.float32)
         return np.clip(a + (b - a) * t, 0, 255).astype(np.uint8)
 
-    ndvi = np.clip(ndvi_array, -1, 1)
+    # Estiramiento por percentiles sobre píxeles válidos (excluye agua/sombra)
+    validos = ndvi_array[ndvi_array > -0.2]
+    if len(validos) > 200:
+        vmin = float(np.percentile(validos, 2))
+        vmax = float(np.percentile(validos, 98))
+    else:
+        vmin, vmax = 0.0, 0.8
+    rango = max(vmax - vmin, 0.01)
 
-    # Agua / sin datos
-    m = ndvi < 0
-    rgb[m] = [20, 40, 70]
+    # Sin datos / agua / sombra de nube
+    m_nodata = ndvi_array < -0.2
+    rgb[m_nodata] = [85, 80, 75]
 
-    # 0 → 0.2: rojo ámbar
-    m = (ndvi >= 0) & (ndvi < 0.2)
-    t = (ndvi[m] / 0.2)[..., None]
-    rgb[m] = lerp([255, 69, 69], [255, 184, 0], t)
+    # Normalizar 0-1 para el resto
+    m_valid = ~m_nodata
+    norm = np.zeros_like(ndvi_array)
+    norm[m_valid] = np.clip((ndvi_array[m_valid] - vmin) / rango, 0, 1)
 
-    # 0.2 → 0.4: ámbar → verde claro
-    m = (ndvi >= 0.2) & (ndvi < 0.4)
-    t = ((ndvi[m] - 0.2) / 0.2)[..., None]
-    rgb[m] = lerp([255, 184, 0], [127, 255, 69], t)
+    # Colormap RdYlGn (ColorBrewer) — mismo que usan FieldData, QGIS, etc.
+    # 0.00 → 0.25 : rojo oscuro → rojo
+    m = m_valid & (norm < 0.25)
+    t = (norm[m] / 0.25)[..., None]
+    rgb[m] = lerp([165, 0, 38], [215, 48, 39], t)
 
-    # 0.4 → 0.6: verde claro → verde medio
-    m = (ndvi >= 0.4) & (ndvi < 0.6)
-    t = ((ndvi[m] - 0.4) / 0.2)[..., None]
-    rgb[m] = lerp([127, 255, 69], [57, 255, 106], t)
+    # 0.25 → 0.50 : rojo → amarillo claro
+    m = m_valid & (norm >= 0.25) & (norm < 0.50)
+    t = ((norm[m] - 0.25) / 0.25)[..., None]
+    rgb[m] = lerp([215, 48, 39], [254, 224, 139], t)
 
-    # 0.6 → 1.0: verde brillante (--green del sistema)
-    m = ndvi >= 0.6
-    t = ((ndvi[m] - 0.6) / 0.4)[..., None]
-    rgb[m] = lerp([57, 255, 106], [20, 220, 80], t)
+    # 0.50 → 0.75 : amarillo claro → verde claro
+    m = m_valid & (norm >= 0.50) & (norm < 0.75)
+    t = ((norm[m] - 0.50) / 0.25)[..., None]
+    rgb[m] = lerp([254, 224, 139], [102, 189, 99], t)
+
+    # 0.75 → 1.00 : verde claro → verde oscuro
+    m = m_valid & (norm >= 0.75)
+    t = ((norm[m] - 0.75) / 0.25)[..., None]
+    rgb[m] = lerp([102, 189, 99], [26, 152, 80], t)
 
     return rgb
 
 
-def _agregar_marcador(rgb: np.ndarray) -> np.ndarray:
-    """Dibuja un marcador de cruz en el centro de la imagen."""
+def _tam_px_para_ha(hectareas: float) -> int:
+    """
+    Calcula el tamaño de ventana en píxeles para aproximar el área del lote.
+    A 10 m/px: lado = sqrt(ha * 10000) / 10 px. Agrega 80% de margen para contexto.
+    """
+    lado_px = int(math.sqrt(hectareas * 10_000) / 10 * 1.8)
+    return max(80, min(220, lado_px))
+
+
+def _dibujar_contorno_lote(rgb: np.ndarray, hectareas: Optional[float]) -> np.ndarray:
+    """
+    Dibuja un rectángulo blanco que indica el área aproximada del lote.
+    El rectángulo ocupa la proporción del lote dentro de la ventana visible.
+    """
     h, w = rgb.shape[:2]
-    cy, cx = h // 2, w // 2
-    size = 10
+
+    if hectareas:
+        tam_px = _tam_px_para_ha(hectareas)
+        # Proporción: cuánto del ancho de la ventana ocupa el lote sin margen
+        prop = math.sqrt(hectareas * 10_000) / 10 / tam_px
+        prop = min(0.90, max(0.30, prop))
+    else:
+        prop = 0.70  # Si no hay hectáreas, marcar el 70% central
+
+    lado_h = int(h * prop)
+    lado_w = int(w * prop)
+    y0 = (h - lado_h) // 2
+    x0 = (w - lado_w) // 2
+    y1 = y0 + lado_h - 1
+    x1 = x0 + lado_w - 1
+
     color = [255, 255, 255]
+    grosor = 4
 
-    for i in range(-size, size + 1):
-        if 0 <= cy + i < h:
-            rgb[cy + i, cx] = color
-        if 0 <= cx + i < w:
-            rgb[cy, cx + i] = color
-
-    # Círculo simple (4 puntos)
-    r = 6
-    for dy, dx in [(-r,0),(r,0),(0,-r),(0,r)]:
-        if 0 <= cy+dy < h and 0 <= cx+dx < w:
-            rgb[cy+dy, cx+dx] = color
+    for t in range(grosor):
+        # Bordes horizontales
+        if 0 <= y0 + t < h:
+            rgb[y0 + t, max(0, x0):min(w, x1 + 1)] = color
+        if 0 <= y1 - t < h:
+            rgb[y1 - t, max(0, x0):min(w, x1 + 1)] = color
+        # Bordes verticales
+        if 0 <= x0 + t < w:
+            rgb[max(0, y0):min(h, y1 + 1), x0 + t] = color
+        if 0 <= x1 - t < w:
+            rgb[max(0, y0):min(h, y1 + 1), x1 - t] = color
 
     return rgb
 
 
-def get_ndvi_mapa(lat: float, lng: float, tam_px: int = 256) -> dict:
+def get_ndvi_mapa(lat: float, lng: float, hectareas: Optional[float] = None) -> dict:
     """
-    Genera una imagen PNG del mapa NDVI para un área alrededor del punto.
-    Retorna la imagen como base64 y los metadatos de la escena.
+    Genera una imagen PNG del mapa NDVI para el área del lote.
+    Si se proveen hectáreas, ajusta la ventana para mostrar solo el lote.
     """
+    tam_px = _tam_px_para_ha(hectareas) if hectareas else 200
     catalog = _cliente_stac()
     ahora = datetime.now(timezone.utc)
 
-    # Estrategia: priorizar recencia sobre claridad
+    # Buscar imagen más reciente con hasta 60 días de antigüedad
     item = _buscar_mejor_escena(
         catalog, lat, lng,
-        fecha_inicio=(ahora - timedelta(days=15)).strftime("%Y-%m-%d"),
+        fecha_inicio=(ahora - timedelta(days=60)).strftime("%Y-%m-%d"),
         fecha_fin=ahora.strftime("%Y-%m-%d"),
         nube_max=60,
     )
     if item is None:
         item = _buscar_mejor_escena(
             catalog, lat, lng,
-            fecha_inicio=(ahora - timedelta(days=30)).strftime("%Y-%m-%d"),
-            fecha_fin=ahora.strftime("%Y-%m-%d"),
-            nube_max=40,
-        )
-    if item is None:
-        item = _buscar_mejor_escena(
-            catalog, lat, lng,
             fecha_inicio=(ahora - timedelta(days=90)).strftime("%Y-%m-%d"),
             fecha_fin=ahora.strftime("%Y-%m-%d"),
-            nube_max=25,
+            nube_max=40,
         )
     if item is None:
         raise ValueError("No hay imágenes disponibles para generar el mapa.")
@@ -485,13 +515,15 @@ def get_ndvi_mapa(lat: float, lng: float, tam_px: int = 256) -> dict:
     ndvi_max = float(np.percentile(ndvi_validos, 95)) if len(ndvi_validos) > 0 else 0.0
     pct_estres = float(np.mean(ndvi_arr < 0.3) * 100)
 
-    # Convertir a imagen RGB
+    # Convertir a imagen RGB y escalar
     rgb = _ndvi_a_rgb(ndvi_arr)
-    rgb = _agregar_marcador(rgb)
-
     img = Image.fromarray(rgb, "RGB")
-    # Escalar a 512px para mejor visualización
-    img = img.resize((512, 512), Image.NEAREST)
+    img = img.resize((512, 512), Image.BILINEAR)
+
+    # Dibujar contorno DESPUÉS del resize para que no se borre con el suavizado
+    rgb512 = np.array(img)
+    rgb512 = _dibujar_contorno_lote(rgb512, hectareas)
+    img = Image.fromarray(rgb512, "RGB")
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -558,31 +590,32 @@ def _ndwi_a_rgb(ndwi_array: np.ndarray) -> np.ndarray:
     return rgb
 
 
-def get_ndwi_mapa(lat: float, lng: float, tam_px: int = 256) -> dict:
+def get_ndwi_mapa(lat: float, lng: float, hectareas: Optional[float] = None) -> dict:
     """
     Genera imagen PNG del mapa NDWI (agua y humedad) para el área alrededor del punto.
     NDWI = (Green - NIR) / (Green + NIR)  —  Bandas B03 y B08 de Sentinel-2.
     """
     catalog = _cliente_stac()
     ahora = datetime.now(timezone.utc)
+    tam_px = _tam_px_para_ha(hectareas) if hectareas else 160
 
     item = _buscar_mejor_escena(
         catalog, lat, lng,
-        fecha_inicio=(ahora - timedelta(days=15)).strftime("%Y-%m-%d"),
+        fecha_inicio=(ahora - timedelta(days=60)).strftime("%Y-%m-%d"),
         fecha_fin=ahora.strftime("%Y-%m-%d"),
         nube_max=60,
     )
     if item is None:
         item = _buscar_mejor_escena(
             catalog, lat, lng,
-            fecha_inicio=(ahora - timedelta(days=30)).strftime("%Y-%m-%d"),
+            fecha_inicio=(ahora - timedelta(days=90)).strftime("%Y-%m-%d"),
             fecha_fin=ahora.strftime("%Y-%m-%d"),
             nube_max=40,
         )
     if item is None:
         item = _buscar_mejor_escena(
             catalog, lat, lng,
-            fecha_inicio=(ahora - timedelta(days=90)).strftime("%Y-%m-%d"),
+            fecha_inicio=(ahora - timedelta(days=180)).strftime("%Y-%m-%d"),
             fecha_fin=ahora.strftime("%Y-%m-%d"),
             nube_max=25,
         )
@@ -617,12 +650,14 @@ def get_ndwi_mapa(lat: float, lng: float, tam_px: int = 256) -> dict:
     else:
         estado_hidrico = {"estado": "seco", "color": "#ff4545", "descripcion": "Déficit hídrico — monitorear"}
 
-    # Imagen
+    # Imagen — dibujar contorno DESPUÉS del resize
     rgb = _ndwi_a_rgb(ndwi_arr)
-    rgb = _agregar_marcador(rgb)
-
     img = Image.fromarray(rgb, "RGB")
-    img = img.resize((512, 512), Image.NEAREST)
+    img = img.resize((512, 512), Image.BILINEAR)
+
+    rgb512 = np.array(img)
+    rgb512 = _dibujar_contorno_lote(rgb512, hectareas)
+    img = Image.fromarray(rgb512, "RGB")
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")

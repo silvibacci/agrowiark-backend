@@ -92,7 +92,7 @@ def consultar_ndvi_serie(
 )
 def consultar_ndvi_mapa(coords: CoordenadasInput):
     try:
-        resultado = satellite.get_ndvi_mapa(coords.lat, coords.lng)
+        resultado = satellite.get_ndvi_mapa(coords.lat, coords.lng, coords.hectareas)
         return resultado
     except ValueError as exc:
         raise HTTPException(status_code=404, detail={"error": str(exc)})
@@ -110,7 +110,7 @@ def consultar_ndvi_mapa(coords: CoordenadasInput):
 )
 def consultar_ndwi_mapa(coords: CoordenadasInput):
     try:
-        return satellite.get_ndwi_mapa(coords.lat, coords.lng)
+        return satellite.get_ndwi_mapa(coords.lat, coords.lng, coords.hectareas)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail={"error": str(exc)})
     except Exception as exc:

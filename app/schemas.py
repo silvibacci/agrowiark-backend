@@ -5,6 +5,7 @@ from typing import Optional, List
 class CoordenadasInput(BaseModel):
     lat: float = Field(..., ge=-60, le=-15, description="Latitud (América del Sur: -60 a -15)")
     lng: float = Field(..., ge=-80, le=-34, description="Longitud (América del Sur: -80 a -34)")
+    hectareas: Optional[float] = Field(None, gt=0, description="Hectáreas del lote — ajusta el área mostrada en el mapa")
 
     model_config = {
         "json_schema_extra": {
