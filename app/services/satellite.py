@@ -519,10 +519,13 @@ def get_ndvi_mapa(lat: float, lng: float, hectareas: Optional[float] = None) -> 
     ndvi_max = float(np.percentile(ndvi_validos, 95)) if len(ndvi_validos) > 0 else 0.0
     pct_estres = float(np.mean(ndvi_arr < 0.3) * 100)
 
-    # Convertir a imagen RGB y escalar — mostramos solo el área del lote
+    # Convertir a imagen RGB, escalar y marcar contorno del lote
     rgb = _ndvi_a_rgb(ndvi_arr)
     img = Image.fromarray(rgb, "RGB")
     img = img.resize((512, 512), Image.NEAREST)
+    rgb512 = np.array(img)
+    rgb512 = _dibujar_contorno_lote(rgb512, hectareas)
+    img = Image.fromarray(rgb512, "RGB")
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -649,10 +652,13 @@ def get_ndwi_mapa(lat: float, lng: float, hectareas: Optional[float] = None) -> 
     else:
         estado_hidrico = {"estado": "seco", "color": "#ff4545", "descripcion": "Déficit hídrico — monitorear"}
 
-    # Imagen — mostramos solo el área del lote
+    # Imagen — escalar y marcar contorno del lote
     rgb = _ndwi_a_rgb(ndwi_arr)
     img = Image.fromarray(rgb, "RGB")
     img = img.resize((512, 512), Image.NEAREST)
+    rgb512 = np.array(img)
+    rgb512 = _dibujar_contorno_lote(rgb512, hectareas)
+    img = Image.fromarray(rgb512, "RGB")
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
